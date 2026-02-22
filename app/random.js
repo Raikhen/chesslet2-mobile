@@ -5,17 +5,18 @@ import * as Haptics from "expo-haptics";
 import Board from "../components/Board";
 import GameHeader from "../components/GameHeader";
 import { WinCelebration } from "../components/Overlays";
-import { CongratsModal } from "../components/Modals";
 import { useGame, GAME_STATE } from "../lib/useGame";
 import { createEmptyBoard, COLORS } from "../lib/constants";
 
 export default function RandomScreen() {
-  const [showCongrats, setShowCongrats] = useState(false);
   const [isPlayingSolution, setIsPlayingSolution] = useState(false);
   const [animatingMove, setAnimatingMove] = useState(null);
   const [animatingMoveIndex, setAnimatingMoveIndex] = useState(0);
   const solutionTimeoutRef = useRef(null);
   const usedSolutionRef = useRef(false);
+  const [piecesVisible, setPiecesVisible] = useState(true);
+  const transitionRef = useRef(null);
+  const isTransitioning = useRef(false);
 
   const { board, gameState, moveHistory, makeMove, resetPuzzle, newPuzzle, getSolution, puzzleInfo } = useGame();
   const makeMoveRef = useRef(makeMove);
@@ -30,31 +31,65 @@ export default function RandomScreen() {
     [makeMove]
   );
 
+  const cancelTransition = useCallback(() => {
+    if (transitionRef.current) {
+      clearTimeout(transitionRef.current);
+      transitionRef.current = null;
+    }
+    isTransitioning.current = false;
+    setPiecesVisible(true);
+  }, []);
+
   // Win handler
   useEffect(() => {
     if (gameState === GAME_STATE.WON && !usedSolutionRef.current) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setShowCongrats(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 100);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 200);
+      // Auto-advance with fade transition
+      transitionRef.current = setTimeout(() => {
+        setPiecesVisible(false);
+        transitionRef.current = setTimeout(() => {
+          isTransitioning.current = true;
+          newPuzzle();
+          usedSolutionRef.current = false;
+        }, 450);
+      }, 1000);
     }
   }, [gameState]);
 
+  // Fade in new pieces after board changes during transition
+  useEffect(() => {
+    if (isTransitioning.current) {
+      isTransitioning.current = false;
+      setTimeout(() => {
+        setPiecesVisible(true);
+      }, 50);
+    }
+  }, [board]);
+
   const handleNewPuzzle = useCallback(() => {
+    cancelTransition();
     newPuzzle();
-    setShowCongrats(false);
     usedSolutionRef.current = false;
     setIsPlayingSolution(false);
     setAnimatingMove(null);
     setAnimatingMoveIndex(0);
     if (solutionTimeoutRef.current) clearTimeout(solutionTimeoutRef.current);
-  }, [newPuzzle]);
+  }, [newPuzzle, cancelTransition]);
+
+  const handleReset = useCallback(() => {
+    cancelTransition();
+    resetPuzzle();
+  }, [resetPuzzle, cancelTransition]);
 
   const handleShowSolution = useCallback(() => {
     const solution = getSolution();
     if (!solution || solution.length === 0) return;
 
+    cancelTransition();
     resetPuzzle();
     setIsPlayingSolution(true);
-    setShowCongrats(false);
     usedSolutionRef.current = true;
 
     let moveIndex = 0;
@@ -81,6 +116,7 @@ export default function RandomScreen() {
   useEffect(() => {
     return () => {
       if (solutionTimeoutRef.current) clearTimeout(solutionTimeoutRef.current);
+      if (transitionRef.current) clearTimeout(transitionRef.current);
     };
   }, []);
 
@@ -95,6 +131,8 @@ export default function RandomScreen() {
           disabled={gameState !== GAME_STATE.PLAYING || isPlayingSolution}
           animatingMove={animatingMove}
           animatingMoveIndex={animatingMoveIndex}
+          targetOpacity={piecesVisible ? 1 : 0}
+          celebrate={gameState === GAME_STATE.WON && !usedSolutionRef.current}
         />
         {gameState === GAME_STATE.WON && !usedSolutionRef.current && <WinCelebration />}
       </View>
@@ -108,7 +146,7 @@ export default function RandomScreen() {
       <View style={styles.controls}>
         <TouchableOpacity
           style={[styles.btn, (moveHistory.length === 0 || isPlayingSolution) && styles.btnDisabled]}
-          onPress={resetPuzzle}
+          onPress={handleReset}
           disabled={moveHistory.length === 0 || isPlayingSolution}
         >
           <Text style={styles.btnText}>Reset</Text>
@@ -131,13 +169,6 @@ export default function RandomScreen() {
         </TouchableOpacity>
       </View>
 
-      <CongratsModal
-        visible={showCongrats}
-        onClose={() => setShowCongrats(false)}
-        onNextPuzzle={() => { setShowCongrats(false); handleNewPuzzle(); }}
-        moveCount={moveHistory.length}
-        solutionCount={puzzleInfo?.metrics?.solutionCount || puzzleInfo?.solutionCount}
-      />
     </SafeAreaView>
   );
 }

@@ -71,6 +71,14 @@ export default function DesignerBoard({ board, onBoardChange, paletteDragHover, 
       newBoard[toRow][toCol] = piece;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       onBoardChange(newBoard);
+    } else {
+      // Dragged off the board - remove the piece
+      const newBoard = board.map((r) => [...r]);
+      if (newBoard[fromRow][fromCol]) {
+        newBoard[fromRow][fromCol] = null;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onBoardChange(newBoard);
+      }
     }
   }, [board, onBoardChange]);
 
@@ -202,6 +210,11 @@ function DesignerDraggablePiece({ piece, row, col, onDragStart, onDragUpdate, on
           shadowOpac.value = 0;
           return;
         }
+      } else {
+        // Dragged off board — mark as dropped so onFinalize doesn't spring back
+        didDrop.value = 1;
+        scale.value = 1;
+        shadowOpac.value = 0;
       }
     })
     .onFinalize(() => {

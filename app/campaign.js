@@ -4,8 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import Board from "../components/Board";
 import GameHeader from "../components/GameHeader";
+import { LevelSelectModal } from "../components/Modals";
 import { WinCelebration } from "../components/Overlays";
-import { LevelCompleteModal, LevelSelectModal } from "../components/Modals";
 import { useGame, GAME_STATE } from "../lib/useGame";
 import { LEVELS, TOTAL_LEVELS, getLevel } from "../lib/levels";
 import { createEmptyBoard, COLORS, DIFFICULTY_COLORS } from "../lib/constants";
@@ -14,11 +14,13 @@ import { loadProgress, saveProgress } from "../lib/storage";
 export default function CampaignScreen() {
   const [currentLevel, setCurrentLevel] = useState(1);
   const [completedLevels, setCompletedLevels] = useState(new Set());
-  const [showCongrats, setShowCongrats] = useState(false);
   const [showLevelSelect, setShowLevelSelect] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [piecesVisible, setPiecesVisible] = useState(true);
   const completedLevelRef = useRef(null);
   const prevGameStateRef = useRef(null);
+  const transitionRef = useRef(null);
+  const isTransitioning = useRef(false);
 
   const levelData = getLevel(currentLevel);
   const { board, gameState, moveHistory, makeMove, resetPuzzle, puzzleInfo } = useGame(levelData?.fen);
@@ -50,32 +52,78 @@ export default function CampaignScreen() {
       completedLevelRef.current !== currentLevel
     ) {
       completedLevelRef.current = currentLevel;
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 100);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 200);
       const newCompleted = new Set(completedLevels);
       newCompleted.add(currentLevel);
       setCompletedLevels(newCompleted);
       saveProgress(currentLevel, newCompleted);
-      setShowCongrats(true);
+
+      // Auto-advance with fade transition (unless last level)
+      if (currentLevel < TOTAL_LEVELS) {
+        transitionRef.current = setTimeout(() => {
+          setPiecesVisible(false);
+          transitionRef.current = setTimeout(() => {
+            isTransitioning.current = true;
+            const next = currentLevel + 1;
+            setCurrentLevel(next);
+            saveProgress(next, newCompleted);
+          }, 450);
+        }, 1000);
+      }
     }
     prevGameStateRef.current = gameState;
   }, [gameState, currentLevel]);
 
+  // Fade in new pieces after board changes during transition
+  useEffect(() => {
+    if (isTransitioning.current) {
+      isTransitioning.current = false;
+      setTimeout(() => {
+        setPiecesVisible(true);
+      }, 50);
+    }
+  }, [board]);
+
+  // Cleanup transition timeouts
+  useEffect(() => {
+    return () => {
+      if (transitionRef.current) clearTimeout(transitionRef.current);
+    };
+  }, []);
+
+  const cancelTransition = useCallback(() => {
+    if (transitionRef.current) {
+      clearTimeout(transitionRef.current);
+      transitionRef.current = null;
+    }
+    isTransitioning.current = false;
+    setPiecesVisible(true);
+  }, []);
+
   const handleNextLevel = useCallback(() => {
-    setShowCongrats(false);
+    cancelTransition();
     if (currentLevel < TOTAL_LEVELS) {
       const next = currentLevel + 1;
       setCurrentLevel(next);
       saveProgress(next, completedLevels);
     }
-  }, [currentLevel, completedLevels]);
+  }, [currentLevel, completedLevels, cancelTransition]);
+
+  const handleReset = useCallback(() => {
+    cancelTransition();
+    resetPuzzle();
+  }, [resetPuzzle, cancelTransition]);
 
   const handleSelectLevel = useCallback(
     (level) => {
+      cancelTransition();
       setCurrentLevel(level);
       setShowLevelSelect(false);
       saveProgress(level, completedLevels);
     },
-    [completedLevels]
+    [completedLevels, cancelTransition]
   );
 
   const progressPercent = (completedLevels.size / TOTAL_LEVELS) * 100;
@@ -115,6 +163,8 @@ export default function CampaignScreen() {
           board={displayBoard}
           onMove={handleMove}
           disabled={gameState !== GAME_STATE.PLAYING}
+          targetOpacity={piecesVisible ? 1 : 0}
+          celebrate={gameState === GAME_STATE.WON}
         />
         {gameState === GAME_STATE.WON && <WinCelebration />}
       </View>
@@ -130,7 +180,7 @@ export default function CampaignScreen() {
       <View style={styles.controls}>
         <TouchableOpacity
           style={[styles.btn, moveHistory.length === 0 && styles.btnDisabled]}
-          onPress={resetPuzzle}
+          onPress={handleReset}
           disabled={moveHistory.length === 0}
         >
           <Text style={[styles.btnText, moveHistory.length === 0 && styles.btnTextDisabled]}>Reset</Text>
@@ -144,17 +194,6 @@ export default function CampaignScreen() {
           <Text style={[styles.btnPrimaryText, isLastLevel && styles.btnTextDisabled]}>Skip ›</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Modals */}
-      <LevelCompleteModal
-        visible={showCongrats}
-        onClose={() => setShowCongrats(false)}
-        onNextLevel={handleNextLevel}
-        moveCount={moveHistory.length}
-        solutionCount={puzzleInfo?.metrics?.solutionCount || puzzleInfo?.solutionCount}
-        levelNumber={currentLevel}
-        isLastLevel={isLastLevel}
-      />
 
       <LevelSelectModal
         visible={showLevelSelect}

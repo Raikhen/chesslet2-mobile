@@ -46,8 +46,9 @@ export default function TimedScreen() {
     let puzzle = generatePuzzle({
       difficulty,
       minPieces: difficulty === DIFFICULTY.EASY ? 2 : difficulty === DIFFICULTY.MEDIUM ? 3 : 4,
-      maxPieces: difficulty === DIFFICULTY.EASY ? 4 : difficulty === DIFFICULTY.MEDIUM ? 6 : 8,
-      maxAttempts: 50,
+      maxPieces: difficulty === DIFFICULTY.EASY ? 4 : difficulty === DIFFICULTY.MEDIUM ? 6 : 7,
+      maxAttempts: difficulty === DIFFICULTY.HARD ? 30 : 50,
+      fast: true,
     });
     if (!puzzle) {
       const starter = getStarterPuzzle(difficulty);
@@ -139,18 +140,22 @@ export default function TimedScreen() {
       <GameHeader title="Timed" showBack />
 
       {gamePhase === "ready" && (
-        <View style={styles.centerCard}>
-          <Text style={styles.readyIcon}>⏱️</Text>
-          <Text style={styles.readyTitle}>Timed Mode</Text>
-          <Text style={styles.readyDesc}>Solve as many puzzles as you can in 60 seconds!</Text>
-          <View style={styles.highScoreBox}>
-            <Text style={styles.highScoreLabel}>Best Score</Text>
-            <Text style={styles.highScoreValue}>{highScore !== null ? highScore : "--"}</Text>
+        <>
+          <View style={styles.centerCard}>
+            <Text style={styles.readyIcon}>⏱️</Text>
+            <Text style={styles.readyTitle}>Timed Mode</Text>
+            <Text style={styles.readyDesc}>Solve as many puzzles as you can in 60 seconds!</Text>
+            <View style={styles.highScoreBox}>
+              <Text style={styles.highScoreLabel}>Best Score</Text>
+              <Text style={styles.highScoreValue}>{highScore !== null ? highScore : "--"}</Text>
+            </View>
           </View>
-          <TouchableOpacity style={styles.startBtn} onPress={startGame}>
-            <Text style={styles.startBtnText}>▶  Start Game</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={styles.controls}>
+            <TouchableOpacity style={styles.startBtn} onPress={startGame}>
+              <Text style={styles.startBtnText}>▶  Start Game</Text>
+            </TouchableOpacity>
+          </View>
+        </>
       )}
 
       {gamePhase === "playing" && (
@@ -177,7 +182,7 @@ export default function TimedScreen() {
           </View>
 
           <View style={styles.boardSection}>
-            <Board board={displayBoard} onMove={handleMove} disabled={gameState !== GAME_STATE.PLAYING} />
+            <Board board={displayBoard} onMove={handleMove} disabled={gameState !== GAME_STATE.PLAYING} celebrate={gameState === GAME_STATE.WON} />
             {gameState === GAME_STATE.WON && <WinCelebration />}
           </View>
 
@@ -197,20 +202,24 @@ export default function TimedScreen() {
       )}
 
       {gamePhase === "finished" && (
-        <View style={styles.centerCard}>
-          <Text style={styles.readyIcon}>{isNewHighScore ? "🏆" : "⏱️"}</Text>
-          <Text style={styles.readyTitle}>{isNewHighScore ? "New High Score!" : "Time's Up!"}</Text>
-          <View style={styles.finalScore}>
-            <Text style={styles.finalScoreLabel}>Puzzles Solved</Text>
-            <Text style={styles.finalScoreValue}>{score}</Text>
+        <>
+          <View style={styles.centerCard}>
+            <Text style={styles.readyIcon}>{isNewHighScore ? "🏆" : "⏱️"}</Text>
+            <Text style={styles.readyTitle}>{isNewHighScore ? "New High Score!" : "Time's Up!"}</Text>
+            <View style={styles.finalScore}>
+              <Text style={styles.finalScoreLabel}>Puzzles Solved</Text>
+              <Text style={styles.finalScoreValue}>{score}</Text>
+            </View>
+            {highScore !== null && !isNewHighScore && (
+              <Text style={styles.bestInfo}>Best: {highScore}</Text>
+            )}
           </View>
-          {highScore !== null && !isNewHighScore && (
-            <Text style={styles.bestInfo}>Best: {highScore}</Text>
-          )}
-          <TouchableOpacity style={styles.startBtn} onPress={startGame}>
-            <Text style={styles.startBtnText}>▶  Play Again</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={styles.controls}>
+            <TouchableOpacity style={styles.startBtn} onPress={startGame}>
+              <Text style={styles.startBtnText}>▶  Play Again</Text>
+            </TouchableOpacity>
+          </View>
+        </>
       )}
     </SafeAreaView>
   );

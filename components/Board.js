@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from "react";
-import { View, Dimensions, StyleSheet } from "react-native";
+import React, { useState, useCallback, useRef, useEffect } from "react";
+import { View, Dimensions, StyleSheet, Animated as RNAnimated, Easing as RNEasing } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useSharedValue,
@@ -22,11 +22,42 @@ const BOARD_WIDTH = Math.min(SCREEN_WIDTH - BOARD_PADDING * 2, 400);
 const SQUARE_SIZE = BOARD_WIDTH / BOARD_SIZE;
 const PIECE_SIZE = SQUARE_SIZE * 0.78;
 
-export default function Board({ board, onMove, disabled, animatingMove, animatingMoveIndex }) {
+export default function Board({ board, onMove, disabled, animatingMove, animatingMoveIndex, targetOpacity, celebrate }) {
   const [dragSource, setDragSource] = useState(null);
   const [validTargets, setValidTargets] = useState([]);
   const [dropTarget, setDropTarget] = useState(null);
   const validTargetsRef = useRef([]);
+
+  // Pieces layer opacity (using RN Animated for reliable opacity animation)
+  const layerOpacity = useRef(new RNAnimated.Value(targetOpacity != null ? targetOpacity : 1)).current;
+
+  useEffect(() => {
+    const target = targetOpacity != null ? targetOpacity : 1;
+    RNAnimated.timing(layerOpacity, {
+      toValue: target,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, [targetOpacity]);
+
+  // Golden glow on win (using RN Animated which works reliably here)
+  const glowAnim = useRef(new RNAnimated.Value(0)).current;
+  useEffect(() => {
+    if (celebrate) {
+      RNAnimated.sequence([
+        RNAnimated.timing(glowAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: false,
+        }),
+        RNAnimated.timing(glowAnim, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    }
+  }, [celebrate]);
 
   const handleDragStart = useCallback(
     (row, col) => {
@@ -64,7 +95,7 @@ export default function Board({ board, onMove, disabled, animatingMove, animatin
   );
 
   const handleDragEnd = useCallback(
-    (fromRow, fromCol, toRow, toCol, onResult) => {
+    (fromRow, fromCol, toRow, toCol) => {
       if (toRow >= 0 && toRow < BOARD_SIZE && toCol >= 0 && toCol < BOARD_SIZE) {
         const isTarget = validTargetsRef.current.some(
           (t) => t.row === toRow && t.col === toCol
@@ -76,8 +107,7 @@ export default function Board({ board, onMove, disabled, animatingMove, animatin
           setValidTargets([]);
           setDropTarget(null);
           validTargetsRef.current = [];
-          if (onResult) onResult(true, toRow, toCol);
-          return;
+          return { valid: true, toRow, toCol };
         }
       }
       // Invalid move - notify to bounce back (only if attempted a move to different square)
@@ -88,7 +118,7 @@ export default function Board({ board, onMove, disabled, animatingMove, animatin
       setValidTargets([]);
       setDropTarget(null);
       validTargetsRef.current = [];
-      if (onResult) onResult(false, toRow, toCol);
+      return { valid: false, toRow, toCol };
     },
     [onMove]
   );
@@ -103,6 +133,12 @@ export default function Board({ board, onMove, disabled, animatingMove, animatin
 
   return (
     <View style={styles.boardContainer}>
+      <RNAnimated.View style={{
+        shadowColor: "#facc15",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.8] }),
+        shadowRadius: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 40] }),
+      }}>
       <View style={styles.board}>
         {/* Square backgrounds */}
         {board.map((row, rowIndex) =>
@@ -144,39 +180,45 @@ export default function Board({ board, onMove, disabled, animatingMove, animatin
           })
         )}
 
-        {/* Draggable pieces layer */}
-        {board.map((row, rowIndex) =>
-          row.map((piece, colIndex) => {
-            if (!piece) return null;
-            const isAnimSource =
-              animatingMove?.from.row === rowIndex &&
-              animatingMove?.from.col === colIndex;
-            const isAnimTarget =
-              animatingMove?.to.row === rowIndex &&
-              animatingMove?.to.col === colIndex;
-            if (isAnimSource || isAnimTarget) return null;
+        {/* Draggable pieces layer with animated opacity */}
+        <RNAnimated.View
+          style={[styles.piecesLayer, { opacity: layerOpacity }]}
+          pointerEvents="box-none"
+        >
+          {board.map((row, rowIndex) =>
+            row.map((piece, colIndex) => {
+              if (!piece) return null;
+              const isAnimSource =
+                animatingMove?.from.row === rowIndex &&
+                animatingMove?.from.col === colIndex;
+              const isAnimTarget =
+                animatingMove?.to.row === rowIndex &&
+                animatingMove?.to.col === colIndex;
+              if (isAnimSource || isAnimTarget) return null;
 
-            return (
-              <DraggablePiece
-                key={`piece-${rowIndex}-${colIndex}`}
-                piece={piece}
-                row={rowIndex}
-                col={colIndex}
-                onDragStart={handleDragStart}
-                onDragUpdate={handleDragUpdate}
-                onDragEnd={handleDragEnd}
-                disabled={disabled}
-              />
-            );
-          })
-        )}
+              return (
+                <DraggablePiece
+                  key={`piece-${rowIndex}-${colIndex}`}
+                  piece={piece}
+                  row={rowIndex}
+                  col={colIndex}
+                  onDragStart={handleDragStart}
+                  onDragUpdate={handleDragUpdate}
+                  onDragEnd={handleDragEnd}
+                  disabled={disabled}
+                  celebrate={celebrate}
+                />
+              );
+            })
+          )}
+        </RNAnimated.View>
 
         {/* Solution animation overlay */}
         {animatingMove &&
           board[animatingMove.from.row]?.[animatingMove.from.col] && (
             <AnimatingPiece
               key={`anim-${animatingMoveIndex || 0}-${animatingMove.from.row}-${animatingMove.from.col}-${animatingMove.to.row}-${animatingMove.to.col}`}
-              piece={board[animatingMove.from.row][animatingMove.from.col]}
+              piece={board[animatingMove.from.row]?.[animatingMove.from.col]}
               fromRow={animatingMove.from.row}
               fromCol={animatingMove.from.col}
               toRow={animatingMove.to.row}
@@ -184,11 +226,12 @@ export default function Board({ board, onMove, disabled, animatingMove, animatin
             />
           )}
       </View>
+      </RNAnimated.View>
     </View>
   );
 }
 
-function DraggablePiece({ piece, row, col, onDragStart, onDragUpdate, onDragEnd, disabled }) {
+function DraggablePiece({ piece, row, col, onDragStart, onDragUpdate, onDragEnd, disabled, celebrate }) {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const scale = useSharedValue(1);
@@ -196,19 +239,42 @@ function DraggablePiece({ piece, row, col, onDragStart, onDragUpdate, onDragEnd,
   const shadowOpac = useSharedValue(0);
   const didDrop = useSharedValue(0);
 
-  // Callback to handle validated drop result - snaps or bounces
-  const handleDropResult = useCallback((wasValid, targetRow, targetCol) => {
-    if (wasValid) {
+  // Winning piece bounce (RNAnimated - not affected by Reduce Motion)
+  const bounceScale = useRef(new RNAnimated.Value(1)).current;
+  useEffect(() => {
+    if (celebrate) {
+      const timer = setTimeout(() => {
+        RNAnimated.sequence([
+          RNAnimated.timing(bounceScale, {
+            toValue: 1.35,
+            duration: 200,
+            easing: RNEasing.out(RNEasing.quad),
+            useNativeDriver: true,
+          }),
+          RNAnimated.spring(bounceScale, {
+            toValue: 1,
+            friction: 6,
+            tension: 180,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }, 180);
+      return () => clearTimeout(timer);
+    }
+  }, [celebrate]);
+
+  // Called on JS thread after drag ends - handles snap or bounce animation
+  const handleDragResult = useCallback((result) => {
+    if (result.valid) {
       didDrop.value = 1;
-      const targetX = (targetCol - col) * SQUARE_SIZE;
-      const targetY = (targetRow - row) * SQUARE_SIZE;
+      const targetX = (result.toCol - col) * SQUARE_SIZE;
+      const targetY = (result.toRow - row) * SQUARE_SIZE;
       translateX.value = targetX;
       translateY.value = targetY;
       scale.value = 1;
       zIdx.value = 1;
       shadowOpac.value = 0;
     } else {
-      // Illegal move - bounce back to original position
       didDrop.value = 0;
       translateX.value = withSpring(0, { damping: 12, stiffness: 180 });
       translateY.value = withSpring(0, { damping: 12, stiffness: 180 });
@@ -217,6 +283,12 @@ function DraggablePiece({ piece, row, col, onDragStart, onDragUpdate, onDragEnd,
       shadowOpac.value = withTiming(0, { duration: 150 });
     }
   }, [row, col]);
+
+  // Wrapper called via runOnJS - calls onDragEnd and processes the result
+  const handleDrop = useCallback((fromRow, fromCol, dropRow, dropCol) => {
+    const result = onDragEnd(fromRow, fromCol, dropRow, dropCol);
+    handleDragResult(result);
+  }, [onDragEnd, handleDragResult]);
 
   const gesture = Gesture.Pan()
     .minDistance(2)
@@ -238,13 +310,13 @@ function DraggablePiece({ piece, row, col, onDragStart, onDragUpdate, onDragEnd,
       const dropCol = Math.floor(centerX / SQUARE_SIZE);
       const dropRow = Math.floor(centerY / SQUARE_SIZE);
 
-      // Call onDragEnd which validates and returns true/false
-      // The handleDropResult callback handles snap vs bounce
-      runOnJS(onDragEnd)(row, col, dropRow, dropCol, handleDropResult);
+      // Set flag before runOnJS to prevent onFinalize from springing back
+      didDrop.value = 1;
+      runOnJS(handleDrop)(row, col, dropRow, dropCol);
     })
     .onFinalize(() => {
       if (didDrop.value !== 1) {
-        // Not a valid drop - spring back (in case onEnd didn't fire)
+        // Only runs if onEnd didn't fire (gesture cancelled)
         translateX.value = withSpring(0, { damping: 12, stiffness: 180 });
         translateY.value = withSpring(0, { damping: 12, stiffness: 180 });
         scale.value = withSpring(1, { damping: 15, stiffness: 200 });
@@ -284,7 +356,9 @@ function DraggablePiece({ piece, row, col, onDragStart, onDragUpdate, onDragEnd,
           animatedStyle,
         ]}
       >
-        <ChessPiece piece={piece} size={PIECE_SIZE} />
+        <RNAnimated.View style={{ transform: [{ scale: bounceScale }] }}>
+          <ChessPiece piece={piece} size={PIECE_SIZE} />
+        </RNAnimated.View>
       </Animated.View>
     </GestureDetector>
   );
@@ -375,6 +449,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 8,
+  },
+  piecesLayer: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    width: BOARD_WIDTH,
+    height: BOARD_WIDTH,
   },
   square: {
     width: SQUARE_SIZE,

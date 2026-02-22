@@ -1,75 +1,121 @@
-import React, { useEffect } from "react";
-import { View, Text, StyleSheet, Dimensions } from "react-native";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withDelay,
-  withRepeat,
-  withSequence,
-  Easing,
-} from "react-native-reanimated";
+import React, { useEffect, useRef, useMemo } from "react";
+import { View, Text, StyleSheet, Dimensions, Animated as RNAnimated, Easing } from "react-native";
 import { COLORS } from "../lib/constants";
 
-const CONFETTI_COLORS = ["#facc15", "#d4a012", "#22c55e", "#f97316", "#b58863", "#fbbf24"];
+const CONFETTI_COLORS = ["#facc15", "#f59e0b", "#22c55e", "#f97316", "#ec4899", "#8b5cf6", "#3b82f6", "#fbbf24"];
 const SCREEN_WIDTH = Dimensions.get("window").width;
+const SCREEN_HEIGHT = Dimensions.get("window").height;
 
-function ConfettiPiece({ delay, color, startX }) {
-  const translateY = useSharedValue(-20);
-  const translateX = useSharedValue(0);
-  const rotate = useSharedValue(0);
-  const opacity = useSharedValue(1);
+function ConfettiPiece({ delay, color, driftX, burstY, fallY, rotation, size, isCircle, originX }) {
+  const translateX = useRef(new RNAnimated.Value(0)).current;
+  const translateY = useRef(new RNAnimated.Value(0)).current;
+  const rotateProgress = useRef(new RNAnimated.Value(0)).current;
+  const opacity = useRef(new RNAnimated.Value(1)).current;
+
+  const pieceW = isCircle ? size : size * 0.7;
+  const pieceH = isCircle ? size : size * 1.4;
 
   useEffect(() => {
-    translateY.value = withDelay(delay, withTiming(400, { duration: 2000, easing: Easing.out(Easing.quad) }));
-    translateX.value = withDelay(delay, withTiming((Math.random() - 0.5) * 100, { duration: 2000 }));
-    rotate.value = withDelay(delay, withTiming(Math.random() * 720 - 360, { duration: 2000 }));
-    opacity.value = withDelay(delay + 1500, withTiming(0, { duration: 500 }));
+    const timer = setTimeout(() => {
+      RNAnimated.parallel([
+        // Burst upward then fall with gravity
+        RNAnimated.sequence([
+          RNAnimated.timing(translateY, {
+            toValue: burstY,
+            duration: 450,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          RNAnimated.timing(translateY, {
+            toValue: fallY,
+            duration: 1400,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+        // Drift sideways with deceleration
+        RNAnimated.timing(translateX, {
+          toValue: driftX,
+          duration: 1850,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        // Gentle spin (0 -> 1 progress, interpolated to degrees)
+        RNAnimated.timing(rotateProgress, {
+          toValue: 1,
+          duration: 1850,
+          useNativeDriver: true,
+        }),
+        // Fade out near end
+        RNAnimated.sequence([
+          RNAnimated.delay(1300),
+          RNAnimated.timing(opacity, {
+            toValue: 0,
+            duration: 550,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+    }, delay);
+    return () => clearTimeout(timer);
   }, []);
 
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: translateY.value },
-      { translateX: translateX.value },
-      { rotate: `${rotate.value}deg` },
-    ],
-    opacity: opacity.value,
-  }));
+  const rotateInterpolated = rotateProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", `${rotation}deg`],
+  });
 
   return (
-    <Animated.View
-      style={[
-        {
-          position: "absolute",
-          left: startX,
-          top: 0,
-          width: 8,
-          height: 12,
-          backgroundColor: color,
-          borderRadius: 2,
-        },
-        style,
-      ]}
+    <RNAnimated.View
+      style={{
+        position: "absolute",
+        left: originX - pieceW / 2,
+        top: "50%",
+        width: pieceW,
+        height: pieceH,
+        backgroundColor: color,
+        borderRadius: isCircle ? size / 2 : 3,
+        transform: [
+          { translateX },
+          { translateY },
+          { rotate: rotateInterpolated },
+        ],
+        opacity,
+      }}
     />
   );
 }
 
-export function WinCelebration() {
-  const pieces = Array.from({ length: 24 }, (_, i) => ({
-    id: i,
-    delay: Math.random() * 500,
-    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-    startX: Math.random() * SCREEN_WIDTH,
-  }));
+export const WinCelebration = React.memo(function WinCelebration() {
+  const pieces = useMemo(() => {
+    const cx = SCREEN_WIDTH / 2;
+    return Array.from({ length: 30 }, (_, i) => {
+      const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.5;
+      const speed = 0.7 + Math.random() * 0.8;
+      const burstY = Math.sin(angle) * speed * 280;
+      return {
+        id: i,
+        delay: Math.random() * 180,
+        color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+        driftX: Math.cos(angle) * speed * 320,
+        burstY,
+        fallY: burstY + 500 + Math.random() * 200,
+        rotation: (Math.random() - 0.5) * 540,
+        size: 9 + Math.random() * 7,
+        isCircle: Math.random() > 0.6,
+        originX: cx + (Math.random() - 0.5) * 20,
+      };
+    });
+  }, []);
 
   return (
     <View style={styles.celebrationContainer} pointerEvents="none">
       {pieces.map((p) => (
-        <ConfettiPiece key={p.id} delay={p.delay} color={p.color} startX={p.startX} />
+        <ConfettiPiece key={p.id} {...p} />
       ))}
     </View>
   );
-}
+});
 
 export function ImpossibleOverlay() {
   return (
@@ -97,8 +143,9 @@ export function StuckOverlay({ onUndo, onReset }) {
 const styles = StyleSheet.create({
   celebrationContainer: {
     ...StyleSheet.absoluteFillObject,
-    overflow: "hidden",
+    overflow: "visible",
     zIndex: 100,
+    elevation: 100,
   },
   impossibleOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -11,19 +11,21 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#f5f3ef"
+      "backgroundColor": "#f0d9b5"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.chesslet.app"
+      "bundleIdentifier": "com.raikhen.chesslet",
+      "buildNumber": "1",
+      "icon": "./assets/ios-icon.png"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#f5f3ef"
+        "backgroundColor": "#f0d9b5"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.chesslet.app"
+      "package": "com.raikhen.chesslet"
     },
     "web": {
       "favicon": "./assets/favicon.png"

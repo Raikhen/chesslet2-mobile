@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+APP_STORE_METADATA.md
+DEPLOY.md
+eas.json

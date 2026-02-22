@@ -32,7 +32,7 @@ const PALETTE_PIECE_SIZE = 36;
 
 export default function DesignerScreen() {
   const [designBoard, setDesignBoard] = useState(createEmptyBoard);
-  const [analysis, setAnalysis] = useState({ status: "need-pieces", message: "Place at least 2 pieces" });
+  const [analysis, setAnalysis] = useState({ status: "unsolvable", message: "Not solvable" });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [testPlayMode, setTestPlayMode] = useState(false);
   const [testPlayFen, setTestPlayFen] = useState(null);
@@ -57,8 +57,11 @@ export default function DesignerScreen() {
 
   // Analyze board
   useEffect(() => {
-    if (pieceCount < 2) {
-      setAnalysis({ status: "need-pieces", message: "Place at least 2 pieces" });
+    if (pieceCount <= 1) {
+      setAnalysis(pieceCount === 1
+        ? { status: "solvable", message: "Solvable!", difficulty: "very-easy", score: 0, solutionCount: 1, minMoves: 0 }
+        : { status: "unsolvable", message: "Not solvable" }
+      );
       return;
     }
     setIsAnalyzing(true);
@@ -216,10 +219,7 @@ export default function DesignerScreen() {
 
       {testPlayMode ? (
         <>
-          <View style={styles.testBadge}>
-            <Text style={styles.testBadgeText}>Testing Puzzle</Text>
-          </View>
-          <View style={styles.boardSection}>
+          <View style={styles.boardSectionFlex}>
             <Board
               board={displayBoard}
               onMove={handleTestMove}
@@ -252,60 +252,64 @@ export default function DesignerScreen() {
         </>
       ) : (
         <>
-          {/* Piece Palette - Drag pieces to the board */}
-          <View style={styles.palette}>
-            <Text style={styles.paletteLabel}>Drag to board</Text>
-            <View style={styles.paletteRow}>
-              {PIECES.map((piece) => (
-                <DraggablePalettePiece
-                  key={piece}
-                  piece={piece}
-                  onDragStart={handlePaletteDragStart}
-                  onDragUpdate={handlePaletteDragUpdate}
-                  onDragEnd={handlePaletteDragEnd}
-                  onDragCancel={handlePaletteDragCancel}
-                />
-              ))}
+          <View style={styles.contentArea}>
+            {/* Piece Palette - Drag pieces to the board */}
+            <View style={styles.palette}>
+              <Text style={styles.paletteLabel}>Drag to board</Text>
+              <View style={styles.paletteRow}>
+                {PIECES.map((piece) => (
+                  <DraggablePalettePiece
+                    key={piece}
+                    piece={piece}
+                    onDragStart={handlePaletteDragStart}
+                    onDragUpdate={handlePaletteDragUpdate}
+                    onDragEnd={handlePaletteDragEnd}
+                    onDragCancel={handlePaletteDragCancel}
+                  />
+                ))}
+              </View>
             </View>
-          </View>
 
-          {/* Design Board with drag support */}
-          <View style={styles.boardSection}>
-            <DesignerBoard
-              board={displayBoard}
-              onBoardChange={handleBoardChange}
-              paletteDragHover={paletteDragHover}
-              onBoardMeasured={handleBoardMeasured}
-            />
-          </View>
-
-          {/* Hint */}
-          <Text style={styles.hint}>
-            Drag pieces to the board. Drag on board to rearrange. Tap to remove.
-          </Text>
-
-          {/* Analysis */}
-          <View style={[styles.analysisCard, analysis.status === "solvable" && { borderColor: COLORS.success }]}>
-            <View style={styles.analysisRow}>
-              <Text style={styles.analysisIcon}>
-                {isAnalyzing ? "⏳" : analysis.status === "solvable" ? "✓" : analysis.status === "unsolvable" ? "✗" : "📝"}
-              </Text>
-              <Text style={styles.analysisText}>
-                {isAnalyzing ? "Analyzing..." : analysis.message}
-              </Text>
-              {analysis.difficulty && (
-                <View style={[styles.diffBadge, { backgroundColor: diffColors.bg }]}>
-                  <Text style={[styles.diffBadgeText, { color: diffColors.text }]}>
-                    {analysis.difficulty.replace(/-/g, " ")}
-                  </Text>
-                </View>
-              )}
+            {/* Design Board with drag support */}
+            <View style={styles.boardSection}>
+              <DesignerBoard
+                board={displayBoard}
+                onBoardChange={handleBoardChange}
+                paletteDragHover={paletteDragHover}
+                onBoardMeasured={handleBoardMeasured}
+              />
             </View>
-            {analysis.status === "solvable" && (
+
+            {/* Analysis */}
+            <View style={[styles.analysisCard, analysis.status === "solvable" && { borderColor: COLORS.success }]}>
+              <View style={styles.analysisRow}>
+                <Text style={styles.analysisIcon}>
+                  {isAnalyzing ? "⏳" : analysis.status === "solvable" ? "✓" : "✗"}
+                </Text>
+                <Text style={styles.analysisText}>
+                  {isAnalyzing ? "Analyzing..." : analysis.message}
+                </Text>
+                {!isAnalyzing && analysis.status === "solvable" && (
+                  <View style={[styles.diffBadge, { backgroundColor: diffColors.bg }]}>
+                    <Text style={[styles.diffBadgeText, { color: diffColors.text }]}>
+                      {analysis.difficulty.replace(/-/g, " ")}
+                    </Text>
+                  </View>
+                )}
+                {!isAnalyzing && analysis.status === "unsolvable" && (
+                  <View style={[styles.diffBadge, { backgroundColor: "#fee2e2" }]}>
+                    <Text style={[styles.diffBadgeText, { color: "#dc2626" }]}>impossible</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.analysisDetails}>
-                {analysis.solutionCount} solution{analysis.solutionCount !== 1 ? "s" : ""} · {analysis.minMoves} moves
+                {isAnalyzing
+                  ? " "
+                  : analysis.status === "solvable"
+                    ? `${analysis.solutionCount} solution${analysis.solutionCount !== 1 ? "s" : ""} · ${analysis.minMoves} moves`
+                    : "0 solutions · \u221E moves"}
               </Text>
-            )}
+            </View>
           </View>
 
           {/* Controls */}
@@ -396,15 +400,7 @@ function DraggablePalettePiece({ piece, onDragStart, onDragUpdate, onDragEnd, on
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  testBadge: {
-    alignSelf: "center",
-    backgroundColor: COLORS.accent + "30",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  testBadgeText: { color: COLORS.accent, fontSize: 14, fontWeight: "600" },
+  contentArea: { flex: 1, justifyContent: "center" },
   palette: {
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -424,27 +420,13 @@ const styles = StyleSheet.create({
   paletteItem: {
     width: 50,
     height: 50,
-    borderRadius: 12,
-    backgroundColor: COLORS.surfaceLight,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
+  boardSectionFlex: { flex: 1, justifyContent: "center" },
   boardSection: { justifyContent: "center", paddingVertical: 8 },
-  hint: {
-    textAlign: "center",
-    color: COLORS.textMuted,
-    fontSize: 13,
-    paddingHorizontal: 24,
-    marginVertical: 8,
-  },
   analysisCard: {
+    marginTop: 8,
     marginHorizontal: 16,
     backgroundColor: COLORS.surface,
     borderRadius: 12,
