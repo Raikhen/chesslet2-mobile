@@ -17,7 +17,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.raikhen.chesslet",
       "buildNumber": "1",
-      "icon": "./assets/ios-icon.png"
+      "icon": "./assets/ios-icon.png",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -32,6 +35,13 @@
     },
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a6118cd8-b9c5-4e16-ae95-8278e3852a35"
+      }
+    },
+    "owner": "raikhen"
   }
 }
